@@ -181,11 +181,35 @@ class SaveRequestsTest(unittest.TestCase):
         capture.responseheaders(SimpleNamespace(response=response))
         self.assertTrue(response.stream)
 
-    def test_injects_upstream_key_on_every_request(self):
-        f = flow(path="/v1/models", method="GET")
+    def test_injects_upstream_key_on_messages_paths_only(self):
+        for path in ("/v1/messages?beta=true", "/v1/messages/count_tokens"):
+            f = flow(path=path)
+            with mock.patch.dict(capture.os.environ, {"UPSTREAM_API_KEY": "real"}):
+                capture.request(f)
+            self.assertEqual(f.request.headers["x-api-key"], "real")
+
+    def test_other_paths_never_get_the_upstream_key(self):
+        for path in ("/v1/files", "/v1/messages/batches", "/v1/messages/../files", "/v1/models"):
+            f = flow(path=path, method="GET")
+            with mock.patch.dict(capture.os.environ, {"UPSTREAM_API_KEY": "real"}):
+                capture.request(f)
+            self.assertEqual(f.request.headers["x-api-key"], "SECRET")
+
+    def test_injection_removes_client_authorization(self):
+        f = flow()
+        f.request.headers["authorization"] = "Bearer client"
         with mock.patch.dict(capture.os.environ, {"UPSTREAM_API_KEY": "real"}):
             capture.request(f)
-        self.assertEqual(f.request.headers["x-api-key"], "real")
+        self.assertNotIn("authorization", f.request.headers)
+
+    def test_local_proxy_ignores_upstream_key_in_shell(self):
+        seen = {}
+        def fake_exec(*_):
+            seen.update(capture.os.environ)
+        with mock.patch.dict(capture.os.environ, {"UPSTREAM_API_KEY": "real"}):
+            with mock.patch.object(capture.os, "execvp", fake_exec):
+                main(["proxy"])
+        self.assertNotIn("UPSTREAM_API_KEY", seen)
 
     def test_leaves_headers_alone_without_upstream_key(self):
         f = flow()

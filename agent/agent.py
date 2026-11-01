@@ -13,6 +13,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
     ClaudeSDKClient,
+    ClaudeSDKError,
     ResultMessage,
     TextBlock,
 )
@@ -47,15 +48,16 @@ async def run_turn(client, prompt):
 
 
 async def interactive(client):
+    all_succeeded = True
     while True:
         try:
             prompt = input("> ").strip()
         except EOFError:
-            return True
+            return all_succeeded
         if prompt == "exit":
-            return True
+            return all_succeeded
         if prompt:
-            await run_turn(client, prompt)
+            all_succeeded = await run_turn(client, prompt) and all_succeeded
 
 
 async def run(args):
@@ -69,7 +71,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--new", action="store_true", help="start a fresh session")
     parser.add_argument("prompt", nargs="?", help="one turn; omit for interactive mode")
-    return 0 if asyncio.run(run(parser.parse_args())) else 1
+    args = parser.parse_args()
+    try:
+        return 0 if asyncio.run(run(args)) else 1
+    except ClaudeSDKError as error:
+        # The conversation is saved, so the next run continues from here.
+        print(f"error: {error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

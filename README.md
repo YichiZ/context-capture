@@ -42,11 +42,21 @@ python3 capture.py tools 0001.json      # per-tool sizes for one capture
 Runs Claude Code's harness in a container, through the proxy. Your local setup isn't
 mounted. It uses API billing, not your subscription.
 
-Put your key in `.env`, which git ignores. Only the proxy container receives it.
+Do this setup once. The containers run as your user, so they can write these folders.
+Only the proxy container receives your key. Use an editor to add it, so it stays out of
+your shell history. Git ignores `.env`.
 
 ```sh
-echo 'ANTHROPIC_API_KEY=your-key' > .env && chmod 600 .env
+mkdir -p -m 700 captures transcripts
+touch .env && chmod 600 .env
+printf 'HOST_UID=%s\nHOST_GID=%s\n' "$(id -u)" "$(id -g)" >> .env
+${EDITOR:-vi} .env    # add the line ANTHROPIC_API_KEY=your-key
 docker compose build
+```
+
+Then run it:
+
+```sh
 docker compose run --rm agent "Read fixture.txt and reply with its first word"
 docker compose run --rm agent "What did you just tell me?"   # continues the conversation
 docker compose run --rm agent                                # interactive; exit to stop
@@ -61,4 +71,5 @@ Both are sensitive and ignored by git.
 
 ```sh
 python3 -m unittest
+python3 -m unittest discover -s agent
 ```

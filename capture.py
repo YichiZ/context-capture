@@ -15,6 +15,7 @@ CAPTURES = Path(__file__).resolve().parent / "captures"
 UPSTREAM = "https://api.anthropic.com"
 HOST = "127.0.0.1"
 PORT = "8080"
+KEYED_PATHS = ("/v1/messages", "/v1/messages/count_tokens")
 ESTIMATE_NOTE = "Tokens are estimates (characters / 4)"
 log = logging.getLogger(__name__)
 
@@ -24,10 +25,12 @@ log = logging.getLogger(__name__)
 
 def request(flow):
     req = flow.request
+    path = req.path.split("?")[0]
     upstream_key = os.environ.get("UPSTREAM_API_KEY")
-    if upstream_key:
-        req.headers["x-api-key"] = upstream_key  # Docker: the agent holds no real key
-    if req.method != "POST" or req.path.split("?")[0] != "/v1/messages":
+    if upstream_key and path in KEYED_PATHS:  # Docker: the agent holds no real key
+        req.headers["x-api-key"] = upstream_key
+        req.headers.pop("authorization", None)
+    if req.method != "POST" or path != "/v1/messages":
         return
     try:
         body = json.loads(req.content)  # .content is already decompressed
@@ -143,6 +146,7 @@ def _run_proxy():
         "--listen-port", PORT,
         "-s", str(Path(__file__).resolve()),
     ]
+    os.environ.pop("UPSTREAM_API_KEY", None)  # key injection is Docker only
     try:
         os.execvp(command[0], command)
     except FileNotFoundError:
