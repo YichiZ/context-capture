@@ -13,7 +13,8 @@
 
 Checkpoints live in `CLAUDE_CONFIG_DIR/projects/checkpoints.json`, so they persist in
 `./transcripts` for Docker and `.claude-local/projects` for local mode. Names are immutable.
-Plain runs keep continuing the latest session, which is the new branch after a resume.
+The current position is saved in `active.json`, so plain runs and checkpoints never guess from
+file timestamps. A resume that hasn't produced a reply yet stays pending and is retried.
 
 File changes aren't undone, because the workspace is read-only in Docker.
 

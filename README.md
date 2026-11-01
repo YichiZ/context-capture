@@ -81,8 +81,8 @@ agent/local.sh resume before         # same, interactive
 ```
 
 The original conversation stays intact, so resuming a later checkpoint works as redo.
-Plain runs continue the newest branch. Only the conversation goes back: file changes
-aren't undone.
+Plain runs continue the branch you're on, even if a resume failed before its first reply.
+Only the conversation goes back: file changes aren't undone.
 
 ## Local mode
 

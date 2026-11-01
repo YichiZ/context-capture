@@ -17,7 +17,7 @@ class FakeSDKError(Exception):
 
 class FakeResult:
     def __init__(self, is_error):
-        self.is_error, self.subtype = is_error, "success"
+        self.is_error, self.subtype, self.session_id = is_error, "success", "fork"
 
 
 stub = types.ModuleType("claude_agent_sdk")
@@ -79,7 +79,20 @@ class OptionsTest(unittest.TestCase):
                 self.assertFalse(agent.build_options(True)["continue_conversation"])
 
 
+def finished(uuid):
+    return types.SimpleNamespace(
+        uuid=uuid, type="assistant", message={"content": [{"type": "text", "text": "ok"}]}
+    )
+
+
 class AgentTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        patch = mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": tmp.name})
+        patch.start()
+        self.addCleanup(patch.stop)
+
     def test_interactive_exits_0_when_turns_succeed(self):
         self.assertEqual(run_main(FakeClient([False]), [], ["hi", "exit"]), 0)
 
@@ -103,7 +116,7 @@ class CheckpointTest(unittest.TestCase):
             mock.patch.object(agent, "list_sessions", lambda **_: [types.SimpleNamespace(session_id="s1")]),
             mock.patch.object(
                 agent, "get_session_messages",
-                lambda *_, **__: [types.SimpleNamespace(uuid="u1"), types.SimpleNamespace(uuid="u2")],
+                lambda *_, **__: [finished("u1"), finished("u2")],
             ),
         ]
         for patch in patches:
@@ -158,6 +171,78 @@ class CheckpointTest(unittest.TestCase):
         self.assertEqual(seen["resume_session_at"], "u2")
         self.assertTrue(seen["fork_session"])
         self.assertFalse(seen["continue_conversation"])
+
+    def options_for_next_run(self, *argv, results=(False,)):
+        seen = {}
+
+        def client(options):
+            seen.clear()
+            seen.update(options)
+            return FakeClient(list(results))
+
+        with mock.patch.object(agent, "ClaudeSDKClient", client):
+            code = self.run_cli(*argv)
+        return code, seen
+
+    def test_missing_name_is_a_usage_error_not_a_prompt(self):
+        for argv in (["checkpoint"], ["resume"]):
+            client = mock.Mock()
+            with mock.patch.object(agent, "ClaudeSDKClient", client):
+                self.assertEqual(self.run_cli(*argv), 1)
+            client.assert_not_called()
+
+    def test_plain_run_after_failed_resume_still_branches(self):
+        self.run_cli("checkpoint", "before")
+        code, _ = self.options_for_next_run("resume", "before", "q", results=[FakeSDKError("boom")])
+        self.assertEqual(code, 1)
+        _, seen = self.options_for_next_run("retry")
+        self.assertEqual(seen["resume"], "s1")
+        self.assertEqual(seen["resume_session_at"], "u2")
+        self.assertTrue(seen["fork_session"])
+
+    def test_plain_run_after_successful_resume_continues_the_branch(self):
+        self.run_cli("checkpoint", "before")
+        self.options_for_next_run("resume", "before", "q")
+        _, seen = self.options_for_next_run("next")
+        self.assertEqual(seen["resume"], "fork")
+        self.assertNotIn("resume_session_at", seen)
+        self.assertFalse(seen["continue_conversation"])
+
+    def test_checkpoint_after_resume_without_a_turn_keeps_the_branch_point(self):
+        self.run_cli("checkpoint", "before")
+        self.options_for_next_run("resume", "before", "q", results=[FakeSDKError("boom")])
+        with mock.patch.object(agent, "get_session_messages", lambda *_, **__: [finished("tip")]):
+            self.run_cli("checkpoint", "here")
+        saved = json.loads((self.config / "projects" / "checkpoints.json").read_text())
+        self.assertEqual(saved["here"], saved["before"])
+
+    def test_checkpoint_follows_the_active_session(self):
+        self.run_cli("checkpoint", "before")
+        self.options_for_next_run("resume", "before", "q")
+        calls = []
+
+        def messages(session_id, **_):
+            calls.append(session_id)
+            return [finished("u9")]
+
+        with mock.patch.object(agent, "get_session_messages", messages):
+            self.run_cli("checkpoint", "later")
+        self.assertEqual(calls, ["fork"])
+
+    def test_new_session_ignores_the_active_session(self):
+        self.run_cli("checkpoint", "before")
+        self.options_for_next_run("resume", "before", "q")
+        _, seen = self.options_for_next_run("--new", "fresh")
+        self.assertNotIn("resume", seen)
+
+    def test_checkpoint_refuses_an_unfinished_turn(self):
+        unanswered = types.SimpleNamespace(uuid="u3", type="user", message={"content": "q"})
+        tool_call = types.SimpleNamespace(
+            uuid="u4", type="assistant", message={"content": [{"type": "tool_use"}]}
+        )
+        for last in (unanswered, tool_call):
+            with mock.patch.object(agent, "get_session_messages", lambda *_, l=last, **__: [l]):
+                self.assertEqual(self.run_cli("checkpoint", "bad"), 1)
 
     def test_a_prompt_mentioning_a_command_is_still_a_prompt(self):
         prompts = []
