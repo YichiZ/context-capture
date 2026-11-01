@@ -6,6 +6,7 @@ agent.py --new ...  start a fresh session instead of continuing the latest one
 """
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -18,7 +19,13 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-TRANSCRIPTS = Path("/data/claude/projects")
+DEFAULT_WORKSPACE = "/workspace"
+DEFAULT_CONFIG_DIR = "/data/claude"
+
+
+def has_session():
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR", DEFAULT_CONFIG_DIR)
+    return any((Path(config_dir) / "projects").rglob("*.jsonl"))
 
 
 def build_options(new_session):
@@ -28,8 +35,8 @@ def build_options(new_session):
         tools=["Read"],
         allowed_tools=["Read"],
         permission_mode="dontAsk",
-        cwd="/workspace",
-        continue_conversation=not new_session and any(TRANSCRIPTS.rglob("*.jsonl")),
+        cwd=os.environ.get("AGENT_WORKSPACE", DEFAULT_WORKSPACE),
+        continue_conversation=not new_session and has_session(),
     )
 
 

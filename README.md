@@ -49,7 +49,7 @@ your shell history. Git ignores `.env`.
 ```sh
 mkdir -p -m 700 captures transcripts
 touch .env && chmod 600 .env
-printf 'HOST_UID=%s\nHOST_GID=%s\n' "$(id -u)" "$(id -g)" >> .env
+printf '\nHOST_UID=%s\nHOST_GID=%s\n' "$(id -u)" "$(id -g)" >> .env
 ${EDITOR:-vi} .env    # add the line ANTHROPIC_API_KEY=your-key
 docker compose build
 ```
@@ -66,6 +66,21 @@ docker compose down
 
 Request bodies go to `captures/` and session transcripts to `transcripts/` as JSONL.
 Both are sensitive and ignored by git.
+
+## Local mode
+
+Runs the same agent on your machine, which is quicker to try but less isolated. It uses
+your `.env` key, and needs `python3 capture.py proxy` running in another terminal.
+
+```sh
+agent/local.sh "Read fixture.txt and reply with its first word"
+agent/local.sh                  # interactive; exit to stop
+agent/local.sh --new "Start over"
+```
+
+Sessions stay in `.claude-local/`, separate from `~/.claude` and from Docker sessions.
+There's no network or file sandbox: the agent holds your key, and `Read` can reach
+anything your user can. Use Docker for evals.
 
 ## Tests
 
