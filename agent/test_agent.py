@@ -1,7 +1,10 @@
 """Runs on the host with a stub SDK: python3 -m unittest discover -s agent"""
+import os
 import sys
+import tempfile
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
@@ -49,6 +52,26 @@ def run_main(client, argv, inputs=()):
             mock.patch.object(sys, "argv", ["agent.py", *argv]), \
             mock.patch("builtins.input", side_effect=list(inputs)):
         return agent.main()
+
+
+class OptionsTest(unittest.TestCase):
+    def test_docker_defaults(self):
+        with mock.patch.dict(os.environ, clear=True):
+            self.assertEqual(agent.build_options(True)["cwd"], "/workspace")
+
+    def test_workspace_override(self):
+        with mock.patch.dict(os.environ, {"AGENT_WORKSPACE": "/tmp/work"}):
+            self.assertEqual(agent.build_options(True)["cwd"], "/tmp/work")
+
+    def test_continues_only_with_a_session_in_config_dir(self):
+        with tempfile.TemporaryDirectory() as config_dir:
+            with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": config_dir}):
+                self.assertFalse(agent.build_options(False)["continue_conversation"])
+                session = Path(config_dir) / "projects" / "workspace" / "one.jsonl"
+                session.parent.mkdir(parents=True)
+                session.write_text("{}")
+                self.assertTrue(agent.build_options(False)["continue_conversation"])
+                self.assertFalse(agent.build_options(True)["continue_conversation"])
 
 
 class AgentTest(unittest.TestCase):
