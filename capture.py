@@ -24,6 +24,9 @@ log = logging.getLogger(__name__)
 
 def request(flow):
     req = flow.request
+    upstream_key = os.environ.get("UPSTREAM_API_KEY")
+    if upstream_key:
+        req.headers["x-api-key"] = upstream_key  # Docker: the agent holds no real key
     if req.method != "POST" or req.path.split("?")[0] != "/v1/messages":
         return
     try:

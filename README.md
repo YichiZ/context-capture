@@ -37,6 +37,26 @@ python3 capture.py summary              # one row per capture
 python3 capture.py tools 0001.json      # per-tool sizes for one capture
 ```
 
+## Docker harness
+
+Runs Claude Code's harness in a container, through the proxy. Your local setup isn't
+mounted. It uses API billing, not your subscription.
+
+Put your key in `.env`, which git ignores. Only the proxy container receives it.
+
+```sh
+echo 'ANTHROPIC_API_KEY=your-key' > .env && chmod 600 .env
+docker compose build
+docker compose run --rm agent "Read fixture.txt and reply with its first word"
+docker compose run --rm agent "What did you just tell me?"   # continues the conversation
+docker compose run --rm agent                                # interactive; exit to stop
+docker compose run --rm agent --new "Start over"             # fresh session
+docker compose down
+```
+
+Request bodies go to `captures/` and session transcripts to `transcripts/` as JSONL.
+Both are sensitive and ignored by git.
+
 ## Tests
 
 ```sh

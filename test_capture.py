@@ -181,6 +181,23 @@ class SaveRequestsTest(unittest.TestCase):
         capture.responseheaders(SimpleNamespace(response=response))
         self.assertTrue(response.stream)
 
+    def test_injects_upstream_key_on_every_request(self):
+        f = flow(path="/v1/models", method="GET")
+        with mock.patch.dict(capture.os.environ, {"UPSTREAM_API_KEY": "real"}):
+            capture.request(f)
+        self.assertEqual(f.request.headers["x-api-key"], "real")
+
+    def test_leaves_headers_alone_without_upstream_key(self):
+        f = flow()
+        with mock.patch.dict(capture.os.environ, clear=True):
+            capture.request(f)
+        self.assertEqual(f.request.headers["x-api-key"], "SECRET")
+
+    def test_injected_key_is_not_saved(self):
+        with mock.patch.dict(capture.os.environ, {"UPSTREAM_API_KEY": "real"}):
+            capture.request(flow())
+        self.assertNotIn("real", (self.dir / "0001.json").read_text())
+
     def test_proxy_command_is_local_reverse_proxy_with_this_addon(self):
         with mock.patch.object(capture.os, "execvp") as execvp:
             main(["proxy"])
