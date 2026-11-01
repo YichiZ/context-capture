@@ -37,8 +37,39 @@ python3 capture.py summary              # one row per capture
 python3 capture.py tools 0001.json      # per-tool sizes for one capture
 ```
 
+## Docker harness
+
+Runs Claude Code's harness in a container, through the proxy. Your local setup isn't
+mounted. It uses API billing, not your subscription.
+
+Do this setup once. The containers run as your user, so they can write these folders.
+Only the proxy container receives your key. Use an editor to add it, so it stays out of
+your shell history. Git ignores `.env`.
+
+```sh
+mkdir -p -m 700 captures transcripts
+touch .env && chmod 600 .env
+printf 'HOST_UID=%s\nHOST_GID=%s\n' "$(id -u)" "$(id -g)" >> .env
+${EDITOR:-vi} .env    # add the line ANTHROPIC_API_KEY=your-key
+docker compose build
+```
+
+Then run it:
+
+```sh
+docker compose run --rm agent "Read fixture.txt and reply with its first word"
+docker compose run --rm agent "What did you just tell me?"   # continues the conversation
+docker compose run --rm agent                                # interactive; exit to stop
+docker compose run --rm agent --new "Start over"             # fresh session
+docker compose down
+```
+
+Request bodies go to `captures/` and session transcripts to `transcripts/` as JSONL.
+Both are sensitive and ignored by git.
+
 ## Tests
 
 ```sh
 python3 -m unittest
+python3 -m unittest discover -s agent
 ```

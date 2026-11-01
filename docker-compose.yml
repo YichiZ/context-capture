@@ -1,0 +1,55 @@
+services:
+  proxy:
+    image: mitmproxy/mitmproxy:12.3.1
+    user: ${HOST_UID:?see Docker harness in README.md}:${HOST_GID:?see Docker harness in README.md}
+    entrypoint: ["mitmdump"]  # the image's entrypoint needs root
+    command: >-
+      --mode reverse:https://api.anthropic.com
+      --listen-host 0.0.0.0 --listen-port 8080 -s /app/capture.py
+    environment:
+      UPSTREAM_API_KEY: ${ANTHROPIC_API_KEY:?put ANTHROPIC_API_KEY in .env}
+      HOME: /tmp
+    volumes:
+      - ./capture.py:/app/capture.py:ro
+      - type: bind
+        source: ./captures
+        target: /app/captures
+        bind:
+          create_host_path: false  # fail clearly instead of creating it as root
+    networks: [internal, egress]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8080), 1)"]
+      interval: 1s
+      retries: 30
+
+  agent:
+    build: agent
+    user: ${HOST_UID:?see Docker harness in README.md}:${HOST_GID:?see Docker harness in README.md}
+    depends_on:
+      proxy:
+        condition: service_healthy
+    environment:
+      ANTHROPIC_BASE_URL: http://proxy:8080
+      ANTHROPIC_API_KEY: placeholder  # the proxy injects the real key
+      CLAUDE_CONFIG_DIR: /data/claude
+      HOME: /tmp
+    volumes:
+      - type: bind
+        source: ./transcripts
+        target: /data/claude/projects
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp
+      - /data/claude:uid=${HOST_UID},gid=${HOST_GID}
+    networks: [internal]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 1g
+    cpus: 1
+
+networks:
+  internal:
+    internal: true
+  egress:
