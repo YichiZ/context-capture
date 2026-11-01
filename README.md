@@ -67,6 +67,23 @@ docker compose down
 Request bodies go to `captures/` and session transcripts to `transcripts/` as JSONL.
 Both are sensitive and ignored by git.
 
+## Checkpoints
+
+Name a point in the conversation, then branch from it later. This works in both modes,
+but each keeps its own sessions and checkpoints. Replace `agent/local.sh` with
+`docker compose run --rm agent` for Docker.
+
+```sh
+agent/local.sh checkpoint before     # name the current point
+agent/local.sh checkpoints           # list names
+agent/local.sh resume before "..."   # branch from it
+agent/local.sh resume before         # same, interactive
+```
+
+The original conversation stays intact, so resuming a later checkpoint works as redo.
+Plain runs continue the branch you're on, even if a resume failed before its first reply.
+Only the conversation goes back: file changes aren't undone.
+
 ## Local mode
 
 Runs the same agent on your machine, which is quicker to try but less isolated. It uses
