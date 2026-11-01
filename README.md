@@ -78,9 +78,13 @@ agent/local.sh                  # interactive; exit to stop
 agent/local.sh --new "Start over"
 ```
 
+The script refuses to run unless the capture proxy is on port 8080, because your key
+travels to it over plain HTTP. It clears `ANTHROPIC_*` and `CLAUDE*` settings from your
+shell, and uses a workspace in `~/.cache/context-capture` holding only the fixture.
+
 Sessions stay in `.claude-local/`, separate from `~/.claude` and from Docker sessions.
 There's no network or file sandbox: the agent holds your key, and `Read` can reach
-anything your user can. Use Docker for evals.
+anything your user can, including `.env`. Use Docker for evals.
 
 ## Tests
 
